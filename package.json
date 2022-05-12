@@ -1,0 +1,20 @@
+{
+  "name": "simple-dicom-viewer",
+  "publish": false,
+  "version": "0.1.0",
+  "author": "Eduardo Pinho <eduardopinho@bmd-software.com>",
+  "main": "pkg/index.js",
+  "scripts": {
+    "build": "rimraf dist pkg && webpack",
+    "start": "rimraf dist pkg && webpack serve --open",
+    "test": "cargo test && wasm-pack test --headless"
+  },
+  "devDependencies": {
+    "@wasm-tool/wasm-pack-plugin": "^1.1.0",
+    "copy-webpack-plugin": "^10.2.4",
+    "rimraf": "^3.0.0",
+    "webpack": "~5.72.0",
+    "webpack-cli": "^4.9.2",
+    "webpack-dev-server": "^4.9.0"
+  }
+}

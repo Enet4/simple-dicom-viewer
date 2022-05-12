@@ -1,0 +1,90 @@
+# You must change these to your own details.
+[package]
+name = "simple-dicom-viewer"
+description = "A simple DICOM Web Viewer!"
+version = "0.1.0"
+publish = false
+authors = ["Eduardo Pinho <eduardopinho@bmd-software.com>"]
+categories = ["wasm"]
+keywords = ["dicom", "viewer"]
+readme = "README.md"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[profile.release]
+# less code to include into binary
+panic = 'abort' 
+# optimization over all codebase (better optimization, slower build)
+codegen-units = 1
+# optimization for size (more aggressive)
+opt-level = 'z' 
+# link time optimization using using whole-program analysis
+lto = true
+
+[features]
+# If you uncomment this line, it will enable `wee_alloc`:
+#default = ["wee_alloc"]
+
+[dependencies]
+# The `wasm-bindgen` crate provides the bare minimum functionality needed
+# to interact with JavaScript.
+wasm-bindgen = "0.2.80"
+
+# `wee_alloc` is a tiny allocator for wasm that is only ~1K in code size
+# compared to the default allocator's ~10K. However, it is slower than the default
+# allocator, so it's not enabled by default.
+wee_alloc = { version = "0.4.2", optional = true }
+gloo-console = "0.2.1"
+gloo-file = "0.2.1"
+
+# DICOM-rs
+dicom = { version = "0.5.0", default-features = false }
+
+# error handling
+snafu = "0.7.1"
+
+# The `web-sys` crate allows you to interact with the various browser APIs,
+# like the DOM.
+[dependencies.web-sys]
+version = "0.3.57"
+features = [
+    "CanvasRenderingContext2d",
+    "DataTransfer",
+    "Document",
+    "DragEvent",
+    "FileReader",
+    "HtmlCanvasElement",
+    "ImageData",
+    "ProgressEvent",
+    "Window"
+]
+
+# The `console_error_panic_hook` crate provides better debugging of panics by
+# logging them with `console.error`. This is great for development, but requires
+# all the `std::fmt` and `std::panicking` infrastructure, so it's only enabled
+# in debug mode.
+[target."cfg(debug_assertions)".dependencies]
+console_error_panic_hook = "0.1.7"
+
+# These crates are used for running unit tests.
+[dev-dependencies]
+wasm-bindgen-test = "0.3.30"
+futures = "0.3.21"
+js-sys = "0.3.22"
+wasm-bindgen-futures = "0.4.30"
+
+# optimize dicom crate for better performance in debug builds
+[profile.dev.package.dicom]
+opt-level = 1
+
+[package.metadata.wasm-pack.profile.dev]
+wasm-opt = false
+
+[package.metadata.wasm-pack.profile.profiling]
+wasm-opt = false
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false
+#wasm-opt = ["-Oz", "--enable-mutable-globals"]
