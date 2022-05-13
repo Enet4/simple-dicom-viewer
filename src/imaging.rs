@@ -17,9 +17,7 @@ pub enum Error {
         source: Option<Box<dyn std::error::Error>>,
     },
     #[snafu(display("{:?}", value))]
-    Js {
-        value: JsValue
-    },
+    Js { value: JsValue },
 }
 
 impl From<Error> for JsValue {
@@ -125,7 +123,10 @@ pub fn simple_pixel_data_lut(obj: &DefaultDicomObject) -> Result<Vec<u8>> {
 }
 /// create a simple LUT which maps a 16-bit image
 /// using the given window level
-pub fn simple_pixel_data_lut_with(obj: &DefaultDicomObject, window_level: WindowLevel) -> Result<Vec<u8>> {
+pub fn simple_pixel_data_lut_with(
+    obj: &DefaultDicomObject,
+    window_level: WindowLevel,
+) -> Result<Vec<u8>> {
     let bits_allocated = obj
         .element(tags::BITS_ALLOCATED)
         .whatever_context("Could not fetch BitsAllocated")?
@@ -151,17 +152,11 @@ pub fn simple_pixel_data_lut_with(obj: &DefaultDicomObject, window_level: Window
 
 /// create a simple LUT which maps a 16-bit image
 /// using the given window level parameters
-pub fn update_pixel_data_lut_with(lut: &mut Vec<u8>, obj: &DefaultDicomObject, window_level: WindowLevel) -> Result<()> {
-    let bits_allocated = obj
-        .element(tags::BITS_ALLOCATED)
-        .whatever_context("Could not fetch BitsAllocated")?
-        .to_int::<u16>()
-        .whatever_context("BitsAllocated is not an integer")?;
-
-    if bits_allocated != 16 {
-        whatever!("Only 16-bit monochrome images are supported at the moment");
-    }
-
+pub fn update_pixel_data_lut_with(
+    lut: &mut Vec<u8>,
+    obj: &DefaultDicomObject,
+    window_level: WindowLevel,
+) -> Result<()> {
     let rescale_slope = if let Some(elem) = obj
         .element_opt(tags::RESCALE_SLOPE)
         .whatever_context("Could not fetch RescaleSlope")?
@@ -182,12 +177,21 @@ pub fn update_pixel_data_lut_with(lut: &mut Vec<u8>, obj: &DefaultDicomObject, w
         0.0
     };
 
-    let voi_lut_function = obj
-        .element(tags::VOILUT_FUNCTION)
-        .map(|e| e.to_str().unwrap().to_string())
-        .unwrap_or_else(|_| "LINEAR".to_string());
+    let voi_lut_function = if let Some(elem) = obj
+        .element_opt(tags::VOILUT_FUNCTION)
+        .whatever_context("Could not fetch VOILUTFunction")?
+    {
+        elem.to_str()
+            .whatever_context("VOILUTFunction is not a string")?
+            .to_string()
+    } else {
+        "LINEAR".to_string()
+    };
 
-    if voi_lut_function != "LINEAR" {
+    if voi_lut_function != "LINEAR"
+        && voi_lut_function != "LINEAR_EXACT"
+        && voi_lut_function != "SIGMOID"
+    {
         whatever!("Unsupported VOI LUT function {}", &voi_lut_function);
     }
 
@@ -236,7 +240,6 @@ fn window_level_linear(x: f64, ww: f64, wc: f64) -> f64 {
     }
 }
 
-
 fn window_level_linear_exact(value: f64, ww: f64, wc: f64) -> f64 {
     debug_assert!(ww >= 0.);
 
@@ -265,7 +268,6 @@ fn window_level_sigmoid(value: f64, ww: f64, wc: f64) -> f64 {
     255. / (1. + f64::exp(-4. * (value - wc) / ww))
 }
 
-
 #[derive(Debug, Copy, Clone, Eq, Hash, PartialEq)]
 pub enum Monochrome {
     Monochrome1,
@@ -286,9 +288,8 @@ pub fn convert_monochrome_to_imagedata(
         .whatever_context("Could not read PixelData as a sequence of 16-bit integers")?;
 
     let data: Vec<u8> = samples
-        .iter()
-        .copied()
-        .map(|x| lut.get(x as usize).map(|x| *x).unwrap_or_default())
+        .into_iter()
+        .map(|x| lut[x as usize])
         .map(|v| {
             if monochrome == Monochrome::Monochrome1 {
                 0xFF - v
@@ -300,7 +301,7 @@ pub fn convert_monochrome_to_imagedata(
         .collect();
 
     ImageData::new_with_u8_clamped_array_and_sh(Clamped(&data), width, height)
-        .map_err(|value| Error::Js {value})
+        .map_err(|value| Error::Js { value })
 }
 
 pub fn convert_rgb_to_imagedata(
@@ -331,5 +332,5 @@ pub fn convert_rgb_to_imagedata(
         .collect();
 
     ImageData::new_with_u8_clamped_array_and_sh(Clamped(&data), width, height)
-        .map_err(|value| Error::Js {value})
+        .map_err(|value| Error::Js { value })
 }
