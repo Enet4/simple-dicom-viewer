@@ -9,8 +9,16 @@ html {
 }
 
 .drop_zone {
-    border: 3px dashed #ddd;
+    border: 3px dashed #ccc;
     min-height: 4rem;
     padding: 16px;
     text-align: center;
+}
+
+.info {
+    font-size: 0.85rem;
+}
+
+.error {
+    color: #f00;
 }
