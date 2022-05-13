@@ -267,7 +267,7 @@ pub struct State {
     canvas_context: CanvasRenderingContext2d,
 }
 
-// This is like the `main` function, except for JavaScript.
+// This is like the `main` function for our Rust webapp.
 #[wasm_bindgen(start)]
 pub fn main_js() -> Result<(), JsValue> {
     // This provides better error messages in debug mode.
@@ -291,6 +291,7 @@ pub fn main_js() -> Result<(), JsValue> {
         .dyn_into::<CanvasRenderingContext2d>()
         .unwrap();
 
+    // clear canvas
     clear(&context).unwrap();
 
     // create the application state
