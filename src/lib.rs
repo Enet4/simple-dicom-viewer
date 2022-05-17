@@ -135,6 +135,8 @@ fn set_drop_zone(state: Rc<RefCell<State>>, element: &HtmlElement) {
 
                 state.dicom_obj = Some(dicom_obj);
                 state.lut = None;
+
+                clear(&state.out_canvas_context).unwrap();
             }
 
             render_obj_to_canvas(&state);
