@@ -1,8 +1,10 @@
 //! Helper module for working with DICOM and imaging data.
 
+use std::borrow::Cow;
+
 use dicom::{
     dictionary_std::tags,
-    object::{file::ReadPreamble, DefaultDicomObject, OpenFileOptions},
+    object::{file::ReadPreamble, DefaultDicomObject, OpenFileOptions}, core::DicomValue,
 };
 use snafu::prelude::*;
 use wasm_bindgen::{Clamped, JsValue};
@@ -41,7 +43,6 @@ pub struct WindowLevel {
 #[inline]
 pub fn byte_data_to_dicom_obj(byte_data: &[u8]) -> Result<dicom::object::DefaultDicomObject> {
     OpenFileOptions::new()
-        .read_all()
         .read_preamble(ReadPreamble::Always)
         .from_reader(byte_data)
         .whatever_context("Failed to read DICOM data")
@@ -74,7 +75,7 @@ pub fn window_level_of(obj: &DefaultDicomObject) -> Result<Option<WindowLevel>> 
     }
 }
 
-pub fn obj_to_imagedata(obj: &DefaultDicomObject, lut: &mut Option<Vec<u8>>) -> Result<ImageData> {
+pub fn obj_to_imagedata(obj: &DefaultDicomObject, y_samples: &mut Vec<u8>, lut: &mut Option<Vec<u8>>) -> Result<ImageData> {
     let photometric_interpretation = obj
         .element(tags::PHOTOMETRIC_INTERPRETATION)
         .whatever_context("Could not fetch PhotometricInterpretation")?
@@ -100,7 +101,7 @@ pub fn obj_to_imagedata(obj: &DefaultDicomObject, lut: &mut Option<Vec<u8>>) -> 
             }
 
             let lut = lut.as_ref().unwrap().as_ref();
-            convert_monochrome_to_imagedata(&obj, Monochrome::Monochrome1, width, height, lut)
+            convert_monochrome_to_y_samples(y_samples, &obj, Monochrome::Monochrome1, lut)?;
         }
         "MONOCHROME2" => {
             if lut.is_none() {
@@ -109,16 +110,19 @@ pub fn obj_to_imagedata(obj: &DefaultDicomObject, lut: &mut Option<Vec<u8>>) -> 
             }
 
             let lut = lut.as_ref().unwrap().as_ref();
-            convert_monochrome_to_imagedata(&obj, Monochrome::Monochrome2, width, height, lut)
+            convert_monochrome_to_y_samples(y_samples, &obj, Monochrome::Monochrome2, lut)?;
         }
-        "RGB" => convert_rgb_to_imagedata(&obj, width, height),
-        pi => whatever!("Unsupported photometric interpretation {}", pi),
+        "RGB" => return convert_rgb_to_imagedata(&obj, width, height),
+        pi => whatever!("Unsupported photometric interpretation {}, sorry. :(", pi),
     }
+
+    ImageData::new_with_u8_clamped_array_and_sh(Clamped(&y_samples), width, height)
+        .map_err(|value| Error::Js { value })
 }
 
 /// create a simple LUT which maps a 16-bit image
 pub fn simple_pixel_data_lut(obj: &DefaultDicomObject) -> Result<Vec<u8>> {
-    let window_level = window_level_of(&obj)?.whatever_context("No window levels :(")?;
+    let window_level = window_level_of(&obj)?.whatever_context("The given image does not provide window levels :(")?;
     simple_pixel_data_lut_with(obj, window_level)
 }
 /// create a simple LUT which maps a 16-bit image
@@ -127,23 +131,13 @@ pub fn simple_pixel_data_lut_with(
     obj: &DefaultDicomObject,
     window_level: WindowLevel,
 ) -> Result<Vec<u8>> {
-    let bits_allocated = obj
-        .element(tags::BITS_ALLOCATED)
-        .whatever_context("Could not fetch BitsAllocated")?
-        .to_int::<u16>()
-        .whatever_context("BitsAllocated is not an integer")?;
-
-    if bits_allocated != 16 {
-        whatever!("Only 16-bit monochrome images are supported at the moment");
-    }
-
     let bits_stored = obj
         .element(tags::BITS_STORED)
         .whatever_context("Could not fetch BitsStored")?
         .to_int::<u16>()
         .whatever_context("BitsStored is not a number")?;
 
-    let mut lut = vec![0; (1 << bits_stored) - 1];
+    let mut lut = vec![0; 1 << bits_stored];
 
     update_pixel_data_lut_with(&mut lut, obj, window_level)?;
 
@@ -274,34 +268,100 @@ pub enum Monochrome {
     Monochrome2,
 }
 
-pub fn convert_monochrome_to_imagedata(
+pub fn convert_monochrome_to_y_samples(
+    y_samples: &mut Vec<u8>,
     obj: &DefaultDicomObject,
     monochrome: Monochrome,
-    width: u32,
-    height: u32,
     lut: &[u8],
-) -> Result<ImageData> {
-    let samples = obj
-        .element(tags::PIXEL_DATA)
-        .whatever_context("Could not fetch PixelData")?
-        .to_multi_int::<u16>()
-        .whatever_context("Could not read PixelData as a sequence of 16-bit integers")?;
+) -> Result<()> {
 
-    let data: Vec<u8> = samples
-        .into_iter()
-        .map(|x| lut[x as usize])
-        .map(|v| {
-            if monochrome == Monochrome::Monochrome1 {
-                0xFF - v
-            } else {
-                v
+    let bits_allocated = obj
+        .element(tags::BITS_ALLOCATED)
+        .whatever_context("Could not fetch BitsAllocated")?
+        .to_int::<u16>()
+        .whatever_context("BitsAllocated is not a number")?;
+
+
+    match bits_allocated {
+        8 => {
+            let samples = obj
+                .element(tags::PIXEL_DATA)
+                .whatever_context("Could not fetch PixelData")?;
+
+            if matches!(samples.value(), DicomValue::PixelSequence { .. }) {
+                whatever!("Encapsulated pixel data encoding is not supported at the moment, sorry. :(");
             }
-        })
-        .flat_map(|v| [v, v, v, 0xFF])
-        .collect();
 
-    ImageData::new_with_u8_clamped_array_and_sh(Clamped(&data), width, height)
-        .map_err(|value| Error::Js { value })
+            let samples = samples
+                .to_bytes()
+                .whatever_context("Could not read PixelData as a sequence of 8-bit integers")?;
+    
+            if samples.len() * 4 != y_samples.len() {
+                y_samples.resize(samples.len() * 4, 255);
+            }
+
+            samples
+                .into_iter()
+                .map(|x| lut[*x as usize])
+                .map(|v| {
+                    if monochrome == Monochrome::Monochrome1 {
+                        0xFF - v
+                    } else {
+                        v
+                    }
+                })
+                .zip(y_samples.chunks_mut(4))
+                .for_each(|(x, y)| {
+                    y[0] = x;
+                    y[1] = x;
+                    y[2] = x;
+                    y[3] = 255;
+                });
+        }
+        16 => {
+            let samples = obj
+                .element(tags::PIXEL_DATA)
+                .whatever_context("Could not fetch PixelData")?;
+
+            if matches!(samples.value(), DicomValue::PixelSequence { .. }) {
+                whatever!("Encapsulated pixel data encoding is not supported at the moment, sorry. :(");
+            }
+
+            let samples: Cow<[u16]> = samples
+                .uint16_slice()
+                .map(Cow::from)
+                .or_else(|_| {
+                    samples
+                        .to_multi_int::<u16>()
+                        .map(Cow::Owned)
+                })
+                .whatever_context("Could not read PixelData as a sequence of 16-bit integers")?;
+
+            if samples.len() * 4 != y_samples.len() {
+                y_samples.resize(samples.len() * 4, 255);
+            }
+        
+            for (y, x) in y_samples.chunks_mut(4).zip(samples.iter().copied()) {
+                let x = lut[x as usize];
+
+                let x = if monochrome == Monochrome::Monochrome1 {
+                    0xFF - x
+                } else {
+                    x
+                };
+
+                y[3] = 255;
+                y[0] = x;
+                y[1] = x;
+                y[2] = x;
+            }
+        }
+        _ => {
+            whatever!("Unsupported BitsAllocated {} :(", bits_allocated);
+        }
+    };
+
+    Ok(())
 }
 
 pub fn convert_rgb_to_imagedata(

@@ -28,8 +28,21 @@ use imaging::{
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
 fn clear(context: &CanvasRenderingContext2d) -> Result<(), JsValue> {
-    let width = 512;
-    let height = 512;
+    let width = 640;
+    let height = 640;
+
+    let mut data: Vec<u8> = (0..width * height)
+        .flat_map(|_| [0, 0, 0, 255])
+        .collect();
+
+    let data = ImageData::new_with_u8_clamped_array_and_sh(Clamped(&mut data), width, height)?;
+    context.put_image_data(&data, 0., 0.)?;
+    Ok(())
+}
+
+fn reset(context: &CanvasRenderingContext2d) -> Result<(), JsValue> {
+    let width = 640;
+    let height = 640;
 
     let mut data: Vec<u8> = (0..width * height)
         .flat_map(|_| [32, 32, 32, 255])
@@ -43,20 +56,23 @@ fn clear(context: &CanvasRenderingContext2d) -> Result<(), JsValue> {
 
     context.begin_path();
 
+    let ref_x = width as f64 / 2.;
+    let ref_y = height as f64 / 2.;
+
     // Draw an outer circle.
-    context.arc(255., 255., 100., 0., std::f64::consts::PI * 2.)?;
+    context.arc(ref_x, ref_y, 128., 0., std::f64::consts::PI * 2.)?;
 
     // a vertical line
-    context.move_to(255., 200.);
-    context.line_to(255., 310.);
+    context.move_to(ref_x, ref_y - 60.);
+    context.line_to(ref_x, ref_y + 60.);
 
     // to the left
-    context.move_to(255., 200.);
-    context.line_to(210., 255.);
+    context.move_to(ref_x, ref_y - 60.);
+    context.line_to(ref_x - 55., ref_y);
 
     // to the right
-    context.move_to(255., 200.);
-    context.line_to(300., 255.);
+    context.move_to(ref_x, ref_y - 60.);
+    context.line_to(ref_x + 55., ref_y);
 
     context.stroke();
 
@@ -78,6 +94,9 @@ fn render_obj_to_canvas(state: &RefCell<State>) {
         window_level: _,
         canvas,
         canvas_context,
+        out_canvas,
+        out_canvas_context,
+        y_samples,
     } = &mut *state;
 
     let obj = if let Some(obj) = &dicom_obj {
@@ -87,18 +106,45 @@ fn render_obj_to_canvas(state: &RefCell<State>) {
         return;
     };
 
-    match obj_to_imagedata(obj, lut) {
+    match obj_to_imagedata(obj, y_samples, lut) {
         Ok(imagedata) => {
-            canvas.set_width(imagedata.width());
-            canvas.set_height(imagedata.height());
+
+            let w = imagedata.width();
+            let h = imagedata.height();
+
+            // send to inner canvas with original size
+            canvas.set_width(w);
+            canvas.set_height(h);
             canvas_context
                 .put_image_data(&imagedata, 0., 0.)
                 .unwrap_or_else(|e| {
                     gloo_console::error!("Error rendering image data:", e);
                 });
+            
+            // scale to fit output canvas
+            let scale = if w > h {
+                out_canvas.width() as f64 / w as f64
+            } else {
+                out_canvas.height() as f64 / h as f64
+            };
+
+            gloo_console::debug!("scale:", scale);
+
+            // set scaling transformation
+            out_canvas_context.set_transform(scale, 0., 0., scale, 0., 0.).unwrap_or_else(|e| {
+                gloo_console::error!("Error scaling image data:", e);
+            });
+
+            // draw contents of inner canvas to outer canvas
+            out_canvas_context.draw_image_with_html_canvas_element(canvas, 0., 0.).unwrap_or_else(|e| {
+                gloo_console::error!("Error drawing scaled image data:", e);
+            });
+
         }
         Err(e) => {
-            gloo_console::error!("Failed to render DICOM object:", e);
+            let msg = format!("Failed to render DICOM object: {}", e);
+            gloo_console::error!(&msg);
+            set_error_messsage(&msg);
         }
     }
 }
@@ -267,6 +313,11 @@ pub struct State {
     window_level: Option<WindowLevel>,
     canvas: HtmlCanvasElement,
     canvas_context: CanvasRenderingContext2d,
+    out_canvas: HtmlCanvasElement,
+    out_canvas_context: CanvasRenderingContext2d,
+    /// memory buffer for the output image data
+    /// (so that it does not have to be reallocated)
+    y_samples: Vec<u8>,
 }
 
 // This is like the `main` function for our Rust webapp.
@@ -282,7 +333,7 @@ pub fn main_js() -> Result<(), JsValue> {
 
     // fetch canvas
 
-    let canvas = document.get_element_by_id("view").unwrap();
+    let canvas = document.get_element_by_id("view_inner").unwrap();
 
     let canvas: HtmlCanvasElement = canvas.dyn_into::<HtmlCanvasElement>().unwrap();
 
@@ -293,16 +344,30 @@ pub fn main_js() -> Result<(), JsValue> {
         .dyn_into::<CanvasRenderingContext2d>()
         .unwrap();
 
+    let out_canvas = document.get_element_by_id("view").unwrap();
+
+    let out_canvas: HtmlCanvasElement = out_canvas.dyn_into::<HtmlCanvasElement>().unwrap();
+
+    let out_context = out_canvas
+        .get_context("2d")
+        .expect("Could not retrieve 2D context from canvas")
+        .expect("2D context is missing")
+        .dyn_into::<CanvasRenderingContext2d>()
+        .unwrap();
+
     // clear canvas
-    clear(&context).unwrap();
+    reset(&out_context).unwrap();
 
     // create the application state
     let state = Rc::new(RefCell::new(State {
         dicom_obj: None,
         lut: None,
         window_level: None,
-        canvas: canvas.clone(),
+        canvas,
         canvas_context: context,
+        out_canvas: out_canvas.clone(),
+        out_canvas_context: out_context,
+        y_samples: Vec::new(),
     }));
 
     // get drop_zone
@@ -314,7 +379,7 @@ pub fn main_js() -> Result<(), JsValue> {
 
     set_drop_zone(Rc::clone(&state), &drop_zone);
 
-    set_window_level_tool(Rc::clone(&state), &canvas);
+    set_window_level_tool(Rc::clone(&state), &out_canvas);
 
     Ok(())
 }
