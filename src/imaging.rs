@@ -101,7 +101,7 @@ pub fn obj_to_imagedata(obj: &DefaultDicomObject, y_samples: &mut Vec<u8>, lut: 
             }
 
             let lut = lut.as_ref().unwrap().as_ref();
-            convert_monochrome_to_y_samples(y_samples, obj, Monochrome::Monochrome1, lut)?;
+            convert_monochrome_to_y_values(y_samples, obj, Monochrome::Monochrome1, lut)?;
         }
         "MONOCHROME2" => {
             if lut.is_none() {
@@ -110,7 +110,7 @@ pub fn obj_to_imagedata(obj: &DefaultDicomObject, y_samples: &mut Vec<u8>, lut: 
             }
 
             let lut = lut.as_ref().unwrap().as_ref();
-            convert_monochrome_to_y_samples(y_samples, obj, Monochrome::Monochrome2, lut)?;
+            convert_monochrome_to_y_values(y_samples, obj, Monochrome::Monochrome2, lut)?;
         }
         "RGB" => return convert_rgb_to_imagedata(obj, width, height),
         pi => whatever!("Unsupported photometric interpretation {}, sorry. :(", pi),
@@ -273,8 +273,8 @@ pub enum Monochrome {
     Monochrome2,
 }
 
-pub fn convert_monochrome_to_y_samples(
-    y_samples: &mut Vec<u8>,
+pub fn convert_monochrome_to_y_values(
+    y_values: &mut Vec<u8>,
     obj: &DefaultDicomObject,
     monochrome: Monochrome,
     lut: &[u8],
@@ -301,27 +301,24 @@ pub fn convert_monochrome_to_y_samples(
                 .to_bytes()
                 .whatever_context("Could not read PixelData as a sequence of 8-bit integers")?;
     
-            if samples.len() * 4 != y_samples.len() {
-                y_samples.resize(samples.len() * 4, 255);
+            if samples.len() * 4 != y_values.len() {
+                y_values.resize(samples.len() * 4, 255);
             }
 
-            samples
-                .iter()
-                .map(|x| lut[*x as usize])
-                .map(|v| {
-                    if monochrome == Monochrome::Monochrome1 {
-                        0xFF - v
-                    } else {
-                        v
-                    }
-                })
-                .zip(y_samples.chunks_mut(4))
-                .for_each(|(x, y)| {
-                    y[0] = x;
-                    y[1] = x;
-                    y[2] = x;
-                    y[3] = 255;
-                });
+            for (y, x) in y_values.chunks_mut(4).zip(samples.iter().copied()) {
+                let x = lut[x as usize];
+
+                let x = if monochrome == Monochrome::Monochrome1 {
+                    0xFF - x
+                } else {
+                    x
+                };
+
+                y[3] = 255;
+                y[0] = x;
+                y[1] = x;
+                y[2] = x;
+            }
         }
         16 => {
             let samples = obj
@@ -342,11 +339,11 @@ pub fn convert_monochrome_to_y_samples(
                 })
                 .whatever_context("Could not read PixelData as a sequence of 16-bit integers")?;
 
-            if samples.len() * 4 != y_samples.len() {
-                y_samples.resize(samples.len() * 4, 255);
+            if samples.len() * 4 != y_values.len() {
+                y_values.resize(samples.len() * 4, 255);
             }
         
-            for (y, x) in y_samples.chunks_mut(4).zip(samples.iter().copied()) {
+            for (y, x) in y_values.chunks_mut(4).zip(samples.iter().copied()) {
                 let x = lut[x as usize];
 
                 let x = if monochrome == Monochrome::Monochrome1 {
