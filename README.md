@@ -2,7 +2,12 @@
 
 This is an experimental DICOM Web viewer, written in Rust.
 
+The viewer uses [DICOM-rs] to deliver a viewer proof of concept,
+using WebAssembly.
+
 **Note:** This viewer does not intend to be suitable for clinical purposes.
+
+[DICOM-rs]: https://github.com/Enet4/dicom-rs
 
 ## How to install
 
@@ -22,17 +27,4 @@ npm start
 ```sh
 # Builds the project and places it into the `dist` folder.
 npm run build
-```
-
-## How to run unit tests
-
-```sh
-# Runs tests in Firefox
-npm test -- --firefox
-
-# Runs tests in Chrome
-npm test -- --chrome
-
-# Runs tests in Safari
-npm test -- --safari
 ```
