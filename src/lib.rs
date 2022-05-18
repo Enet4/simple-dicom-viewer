@@ -1,4 +1,5 @@
 use wasm_bindgen::prelude::*;
+use web_sys::ImageData;
 use web_sys::MouseEvent;
 
 use std::cell::Cell;
@@ -7,10 +8,9 @@ use std::rc::Rc;
 
 use dicom::object::DefaultDicomObject;
 use gloo_file::Blob;
-use wasm_bindgen::Clamped;
 use wasm_bindgen::JsCast;
 use web_sys::HtmlElement;
-use web_sys::{self, CanvasRenderingContext2d, HtmlCanvasElement, ImageData};
+use web_sys::{self, CanvasRenderingContext2d, HtmlCanvasElement};
 
 pub mod imaging;
 
@@ -75,6 +75,39 @@ fn set_error_messsage(msg: &str) {
     error_message.set_inner_html(msg);
 }
 
+fn render_image_to_canvas(
+    imagedata: ImageData,
+    canvas: &HtmlCanvasElement,
+    canvas_context: &CanvasRenderingContext2d,
+    out_canvas: &HtmlCanvasElement,
+    out_canvas_context: &CanvasRenderingContext2d,
+) -> Result<(), JsValue> {
+    clear(out_canvas_context)?;
+
+    let w = imagedata.width();
+    let h = imagedata.height();
+
+    // send to inner canvas with original size
+    canvas.set_width(w);
+    canvas.set_height(h);
+    canvas_context.put_image_data(&imagedata, 0., 0.)?;
+
+    // scale to fit output canvas
+    let scale = if w > h {
+        out_canvas.width() as f64 / w as f64
+    } else {
+        out_canvas.height() as f64 / h as f64
+    };
+
+    // set scaling transformation
+    out_canvas_context.set_transform(scale, 0., 0., scale, 0., 0.)?;
+
+    // draw contents of inner canvas to outer canvas
+    out_canvas_context.draw_image_with_html_canvas_element(canvas, 0., 0.)?;
+
+    Ok(())
+}
+
 fn render_obj_to_canvas(state: &RefCell<State>) {
     let mut state = state.borrow_mut();
     let State {
@@ -97,38 +130,20 @@ fn render_obj_to_canvas(state: &RefCell<State>) {
 
     match obj_to_imagedata(obj, y_samples, lut) {
         Ok(imagedata) => {
-
-            let w = imagedata.width();
-            let h = imagedata.height();
-
-            // send to inner canvas with original size
-            canvas.set_width(w);
-            canvas.set_height(h);
-            canvas_context
-                .put_image_data(&imagedata, 0., 0.)
-                .unwrap_or_else(|e| {
-                    gloo_console::error!("Error rendering image data:", e);
-                });
-            
-            // scale to fit output canvas
-            let scale = if w > h {
-                out_canvas.width() as f64 / w as f64
-            } else {
-                out_canvas.height() as f64 / h as f64
-            };
-
-            gloo_console::debug!("scale:", scale);
-
-            // set scaling transformation
-            out_canvas_context.set_transform(scale, 0., 0., scale, 0., 0.).unwrap_or_else(|e| {
-                gloo_console::error!("Error scaling image data:", e);
+            render_image_to_canvas(
+                imagedata,
+                canvas,
+                canvas_context,
+                out_canvas,
+                out_canvas_context,
+            )
+            .map(|_| {
+                set_error_messsage("");
+            })
+            .unwrap_or_else(|e| {
+                gloo_console::error!("Error rendering image data:", e);
+                set_error_messsage("Sorry, could not render the image data to the screen. :(");
             });
-
-            // draw contents of inner canvas to outer canvas
-            out_canvas_context.draw_image_with_html_canvas_element(canvas, 0., 0.).unwrap_or_else(|e| {
-                gloo_console::error!("Error drawing scaled image data:", e);
-            });
-
         }
         Err(e) => {
             let msg = format!("Failed to render DICOM object: {}", e);
@@ -166,12 +181,10 @@ fn set_drop_zone(state: Rc<RefCell<State>>, element: &HtmlElement) {
                 let mut state = state.borrow_mut();
 
                 // look for window level
-                state.window_level = window_level_of(&dicom_obj).unwrap_or_else(|_e| None);
+                state.window_level = window_level_of(&dicom_obj).unwrap_or(None);
 
                 state.dicom_obj = Some(dicom_obj);
                 state.lut = None;
-
-                clear(&state.out_canvas_context).unwrap();
             }
 
             render_obj_to_canvas(&state);
