@@ -97,32 +97,32 @@ pub fn obj_to_imagedata(obj: &DefaultDicomObject, y_samples: &mut Vec<u8>, lut: 
         "MONOCHROME1" => {
             if lut.is_none() {
                 gloo_console::debug!("Creating monochrome2 LUT");
-                *lut = Some(simple_pixel_data_lut(&obj)?);
+                *lut = Some(simple_pixel_data_lut(obj)?);
             }
 
             let lut = lut.as_ref().unwrap().as_ref();
-            convert_monochrome_to_y_samples(y_samples, &obj, Monochrome::Monochrome1, lut)?;
+            convert_monochrome_to_y_samples(y_samples, obj, Monochrome::Monochrome1, lut)?;
         }
         "MONOCHROME2" => {
             if lut.is_none() {
                 gloo_console::debug!("Creating monochrome2 LUT");
-                *lut = Some(simple_pixel_data_lut(&obj)?);
+                *lut = Some(simple_pixel_data_lut(obj)?);
             }
 
             let lut = lut.as_ref().unwrap().as_ref();
-            convert_monochrome_to_y_samples(y_samples, &obj, Monochrome::Monochrome2, lut)?;
+            convert_monochrome_to_y_samples(y_samples, obj, Monochrome::Monochrome2, lut)?;
         }
-        "RGB" => return convert_rgb_to_imagedata(&obj, width, height),
+        "RGB" => return convert_rgb_to_imagedata(obj, width, height),
         pi => whatever!("Unsupported photometric interpretation {}, sorry. :(", pi),
     }
 
-    ImageData::new_with_u8_clamped_array_and_sh(Clamped(&y_samples), width, height)
+    ImageData::new_with_u8_clamped_array_and_sh(Clamped(y_samples), width, height)
         .map_err(|value| Error::Js { value })
 }
 
 /// create a simple LUT which maps a 16-bit image
 pub fn simple_pixel_data_lut(obj: &DefaultDicomObject) -> Result<Vec<u8>> {
-    let window_level = window_level_of(&obj)?.whatever_context("The given image does not provide window levels :(")?;
+    let window_level = window_level_of(obj)?.whatever_context("The given image does not provide window levels :(")?;
     simple_pixel_data_lut_with(obj, window_level)
 }
 /// create a simple LUT which maps a 16-bit image
@@ -145,12 +145,17 @@ pub fn simple_pixel_data_lut_with(
 }
 
 /// create a simple LUT which maps a 16-bit image
-/// using the given window level parameters
+/// using the given window level parameters.
+/// 
+/// `lut` must have the correct size for the given object
+/// (`1 << bits_stored`).
 pub fn update_pixel_data_lut_with(
-    lut: &mut Vec<u8>,
+    lut: &mut [u8],
     obj: &DefaultDicomObject,
     window_level: WindowLevel,
 ) -> Result<()> {
+    debug_assert!(lut.len() >= 256);
+
     let rescale_slope = if let Some(elem) = obj
         .element_opt(tags::RESCALE_SLOPE)
         .whatever_context("Could not fetch RescaleSlope")?
@@ -301,7 +306,7 @@ pub fn convert_monochrome_to_y_samples(
             }
 
             samples
-                .into_iter()
+                .iter()
                 .map(|x| lut[*x as usize])
                 .map(|v| {
                     if monochrome == Monochrome::Monochrome1 {

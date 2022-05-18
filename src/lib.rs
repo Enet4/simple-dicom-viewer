@@ -165,7 +165,7 @@ fn set_drop_zone(state: Rc<RefCell<State>>, element: &HtmlElement) {
                 let mut state = state.borrow_mut();
 
                 // look for window level
-                state.window_level = window_level_of(&dicom_obj).unwrap_or_else(|_e| None);
+                state.window_level = window_level_of(&dicom_obj).unwrap_or(None);
 
                 state.dicom_obj = Some(dicom_obj);
                 state.lut = None;
