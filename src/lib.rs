@@ -7,10 +7,9 @@ use std::rc::Rc;
 
 use dicom::object::DefaultDicomObject;
 use gloo_file::Blob;
-use wasm_bindgen::Clamped;
 use wasm_bindgen::JsCast;
 use web_sys::HtmlElement;
-use web_sys::{self, CanvasRenderingContext2d, HtmlCanvasElement, ImageData};
+use web_sys::{self, CanvasRenderingContext2d, HtmlCanvasElement};
 
 pub mod imaging;
 
