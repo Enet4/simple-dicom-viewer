@@ -28,15 +28,8 @@ use imaging::{
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
 fn clear(context: &CanvasRenderingContext2d) -> Result<(), JsValue> {
-    let width = 640;
-    let height = 640;
-
-    let mut data: Vec<u8> = (0..width * height)
-        .flat_map(|_| [0, 0, 0, 255])
-        .collect();
-
-    let data = ImageData::new_with_u8_clamped_array_and_sh(Clamped(&mut data), width, height)?;
-    context.put_image_data(&data, 0., 0.)?;
+    context.set_fill_style(&JsValue::from_str("#000"));
+    context.fill_rect(0., 0., 640., 640.);
     Ok(())
 }
 
@@ -44,12 +37,8 @@ fn reset(context: &CanvasRenderingContext2d) -> Result<(), JsValue> {
     let width = 640;
     let height = 640;
 
-    let mut data: Vec<u8> = (0..width * height)
-        .flat_map(|_| [32, 32, 32, 255])
-        .collect();
-
-    let data = ImageData::new_with_u8_clamped_array_and_sh(Clamped(&mut data), width, height)?;
-    context.put_image_data(&data, 0., 0.)?;
+    context.set_fill_style(&JsValue::from_str("#222"));
+    context.fill_rect(0., 0., 640., 640.);
 
     context.set_line_width(2.);
     context.set_stroke_style(&"#fff".into());
