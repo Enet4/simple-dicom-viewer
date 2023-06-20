@@ -1,5 +1,5 @@
 node_modules
-/target
+/rust/target
 /pkg
 /wasm-pack.log
 /dist

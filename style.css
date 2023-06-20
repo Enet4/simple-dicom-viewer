@@ -33,3 +33,11 @@ p {
     font-size: 1rem;
     min-height: 1.25rem;
 }
+
+a {
+    color: #44f0f2
+}
+
+a:visited {
+    color: #fc44fc
+}

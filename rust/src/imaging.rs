@@ -342,9 +342,11 @@ pub fn convert_monochrome_to_y_values(
             if samples.len() * 4 != y_values.len() {
                 y_values.resize(samples.len() * 4, 255);
             }
-        
+
+            let x_mask = lut.len() - 1;
+
             for (y, x) in y_values.chunks_mut(4).zip(samples.iter().copied()) {
-                let x = lut[x as usize];
+                let x = lut[x as usize & x_mask];
 
                 let x = if monochrome == Monochrome::Monochrome1 {
                     0xFF - x
