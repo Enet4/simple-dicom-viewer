@@ -36,7 +36,7 @@ module.exports = {
       crateDirectory: path.resolve(__dirname, "rust"),
       args: '--verbose',
       outDir: path.resolve(__dirname, "pkg"),
-      forceMode: "development",
+      //forceMode: "development",
 
     }),
   ],
