@@ -37,11 +37,14 @@ wee_alloc = { version = "0.4.2", optional = true }
 gloo-console = "0.2.1"
 gloo-file = "0.2.1"
 
-# DICOM-rs
-dicom = { version = "0.5.0", default-features = false }
-
 # error handling
 snafu = "0.7.1"
+
+# DICOM-rs
+[dependencies.dicom]
+git = "https://github.com/Enet4/dicom-rs"
+branch = "master"
+default-features = false
 
 # The `web-sys` crate allows you to interact with the various browser APIs,
 # like the DOM.
