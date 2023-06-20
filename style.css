@@ -35,9 +35,13 @@ p {
 }
 
 a {
-    color: #44f0f2
+    color: #44eeef
+}
+
+a:hover {
+    color: #e0e0ee
 }
 
 a:visited {
-    color: #fc44fc
+    color: #ef44ef
 }
