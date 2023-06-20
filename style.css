@@ -14,3 +14,11 @@ html {
     padding: 16px;
     text-align: center;
 }
+
+a {
+    color: #44f0f2
+}
+
+a:visited {
+    color: #fc44fc
+}

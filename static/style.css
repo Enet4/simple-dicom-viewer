@@ -33,3 +33,15 @@ p {
     font-size: 1rem;
     min-height: 1.25rem;
 }
+
+a {
+    color: #44eeef
+}
+
+a:hover {
+    color: #e0e0ee
+}
+
+a:visited {
+    color: #ef44ef
+}
