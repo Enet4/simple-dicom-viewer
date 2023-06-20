@@ -33,8 +33,11 @@ module.exports = {
       ],
     }),
     new WasmPackPlugin({
-      crateDirectory: __dirname,
-      //forceMode: "development",
+      crateDirectory: path.resolve(__dirname, "rust"),
+      args: '--verbose',
+      outDir: path.resolve(__dirname, "pkg"),
+      forceMode: "development",
+
     }),
   ],
   experiments: {
