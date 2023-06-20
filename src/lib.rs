@@ -19,14 +19,6 @@ use imaging::{
     WindowLevel,
 };
 
-// When the `wee_alloc` feature is enabled, this uses `wee_alloc` as the global
-// allocator.
-//
-// If you don't want to use `wee_alloc`, you can safely delete this.
-#[cfg(feature = "wee_alloc")]
-#[global_allocator]
-static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
-
 fn clear(context: &CanvasRenderingContext2d) -> Result<(), JsValue> {
     context.set_fill_style(&JsValue::from_str("#000"));
     context.fill_rect(0., 0., 640., 640.);

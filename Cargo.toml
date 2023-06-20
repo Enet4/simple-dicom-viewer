@@ -24,8 +24,6 @@ opt-level = 'z'
 lto = true
 
 [features]
-# If you uncomment this line, it will enable `wee_alloc`:
-#default = ["wee_alloc"]
 
 [dependencies]
 # The `wasm-bindgen` crate provides the bare minimum functionality needed
